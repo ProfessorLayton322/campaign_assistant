@@ -2,20 +2,33 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8">
-		<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 		<meta name="theme-color" content="#1a1a2e">
+		<meta name="apple-mobile-web-app-capable" content="yes">
+		<meta name="mobile-web-app-capable" content="yes">
 		<title>$GODOT_PROJECT_NAME</title>
 		<style>
 			* {
 				margin: 0;
 				padding: 0;
 				box-sizing: border-box;
+				-webkit-touch-callout: none;
+				-webkit-user-select: none;
+				-khtml-user-select: none;
+				-moz-user-select: none;
+				-ms-user-select: none;
+				user-select: none;
+				-webkit-tap-highlight-color: transparent;
 			}
 			html, body {
 				width: 100%;
 				height: 100%;
 				overflow: hidden;
 				background-color: #1a1a2e;
+				position: fixed;
+				touch-action: none;
+				overscroll-behavior: none;
+				-webkit-overflow-scrolling: auto;
 			}
 			#canvas-container {
 				width: 100%;
@@ -24,12 +37,17 @@
 				display: flex;
 				align-items: center;
 				justify-content: center;
+				position: fixed;
+				top: 0;
+				left: 0;
+				touch-action: none;
 			}
 			#canvas {
 				display: block;
 				width: 100%;
 				height: 100%;
 				touch-action: none;
+				-ms-touch-action: none;
 			}
 			#status {
 				position: absolute;
@@ -100,13 +118,60 @@
 				console.error(err);
 			}
 
-			// Prevent default browser zoom/scroll behaviors
+			// Prevent browser gesture behaviors while allowing Godot to receive touch events
+			// Using capture phase to intercept before default handling but after Godot's listeners
+			const canvas = document.getElementById('canvas');
+			const container = document.getElementById('canvas-container');
+
+			// Prevent wheel zoom on entire document
 			document.addEventListener('wheel', function(e) {
 				e.preventDefault();
 			}, { passive: false });
 
-			document.addEventListener('touchmove', function(e) {
-				if (e.touches.length > 1) {
+			// Prevent browser's touch handling on canvas - this stops browser zoom/pan
+			// while still allowing Godot to receive the touch events
+			canvas.addEventListener('touchstart', function(e) {
+				// Don't prevent default here to allow Godot to receive events
+				// CSS touch-action: none handles browser gesture prevention
+			}, { passive: true });
+
+			canvas.addEventListener('touchmove', function(e) {
+				// Prevent default to stop any residual browser scrolling/zooming
+				e.preventDefault();
+			}, { passive: false });
+
+			// Prevent gesture events (Safari pinch zoom)
+			document.addEventListener('gesturestart', function(e) {
+				e.preventDefault();
+			}, { passive: false });
+
+			document.addEventListener('gesturechange', function(e) {
+				e.preventDefault();
+			}, { passive: false });
+
+			document.addEventListener('gestureend', function(e) {
+				e.preventDefault();
+			}, { passive: false });
+
+			// Prevent context menu on long press
+			document.addEventListener('contextmenu', function(e) {
+				e.preventDefault();
+			}, { passive: false });
+
+			// Prevent double-tap zoom
+			let lastTouchEnd = 0;
+			document.addEventListener('touchend', function(e) {
+				const now = Date.now();
+				if (now - lastTouchEnd <= 300) {
+					e.preventDefault();
+				}
+				lastTouchEnd = now;
+			}, { passive: false });
+
+			// Prevent pull-to-refresh and overscroll on body/html
+			document.body.addEventListener('touchmove', function(e) {
+				// Only prevent if touch is outside the canvas
+				if (!canvas.contains(e.target)) {
 					e.preventDefault();
 				}
 			}, { passive: false });
