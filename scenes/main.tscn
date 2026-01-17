@@ -41,12 +41,11 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="TeamMarker" type="TextureRect" parent="MapContainer/MarkersContainer"]
-layout_mode = 1
-offset_left = 481.00003
-offset_top = 244.0
-offset_right = 513.0
-offset_bottom = 276.0
-scale = Vector2(0.6098658, 0.6098658)
+layout_mode = 0
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 32.0
+offset_bottom = 32.0
 texture = ExtResource("2_0wfyh")
 expand_mode = 1
 stretch_mode = 5

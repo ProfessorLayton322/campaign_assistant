@@ -118,7 +118,7 @@
 				displayFailureNotice(err);
 			});
 
-			// Zoom functionality
+			// Zoom and pan functionality
 			function initZoom() {
 				const canvas = document.getElementById('canvas');
 				const container = document.getElementById('canvas-container');
@@ -155,16 +155,64 @@
 					}
 				}, { passive: false });
 
-				// Mobile: Pinch to zoom
+				// Desktop: Left-click drag to pan
+				let isDragging = false;
+				let dragStartX = 0;
+				let dragStartY = 0;
+				let dragStartTranslateX = 0;
+				let dragStartTranslateY = 0;
+
+				container.addEventListener('mousedown', function(e) {
+					if (e.button === 0) { // Left click only
+						isDragging = true;
+						dragStartX = e.clientX;
+						dragStartY = e.clientY;
+						dragStartTranslateX = translateX;
+						dragStartTranslateY = translateY;
+						container.style.cursor = 'grabbing';
+						e.preventDefault();
+					}
+				});
+
+				document.addEventListener('mousemove', function(e) {
+					if (isDragging) {
+						const dx = e.clientX - dragStartX;
+						const dy = e.clientY - dragStartY;
+						translateX = dragStartTranslateX + dx;
+						translateY = dragStartTranslateY + dy;
+						updateTransform();
+					}
+				});
+
+				document.addEventListener('mouseup', function(e) {
+					if (isDragging) {
+						isDragging = false;
+						container.style.cursor = 'grab';
+					}
+				});
+
+				// Set initial cursor style
+				container.style.cursor = 'grab';
+
+				// Mobile: Pinch to zoom and single-finger pan
 				let initialDistance = 0;
 				let initialScale = 1;
 				let initialTranslateX = 0;
 				let initialTranslateY = 0;
 				let initialMidpoint = { x: 0, y: 0 };
+				let activeTouchCount = 0;
+				let singleTouchStartX = 0;
+				let singleTouchStartY = 0;
+				let singleTouchStartTranslateX = 0;
+				let singleTouchStartTranslateY = 0;
+				let wasPinching = false;
 
 				container.addEventListener('touchstart', function(e) {
+					activeTouchCount = e.touches.length;
+
 					if (e.touches.length === 2) {
 						e.preventDefault();
+						wasPinching = true;
 						const touch1 = e.touches[0];
 						const touch2 = e.touches[1];
 						initialDistance = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
@@ -177,6 +225,13 @@
 							x: (touch1.clientX + touch2.clientX) / 2 - rect.left - rect.width / 2,
 							y: (touch1.clientY + touch2.clientY) / 2 - rect.top - rect.height / 2
 						};
+					} else if (e.touches.length === 1 && !wasPinching) {
+						// Single finger pan - only if not transitioning from pinch
+						const touch = e.touches[0];
+						singleTouchStartX = touch.clientX;
+						singleTouchStartY = touch.clientY;
+						singleTouchStartTranslateX = translateX;
+						singleTouchStartTranslateY = translateY;
 					}
 				}, { passive: false });
 
@@ -189,27 +244,61 @@
 
 						const newScale = Math.min(maxScale, Math.max(minScale, initialScale * (currentDistance / initialDistance)));
 
-						if (newScale !== scale) {
-							const scaleChange = newScale / initialScale;
-							translateX = initialMidpoint.x - (initialMidpoint.x - initialTranslateX) * scaleChange;
-							translateY = initialMidpoint.y - (initialMidpoint.y - initialTranslateY) * scaleChange;
-							scale = newScale;
-							updateTransform();
-						}
+						const scaleChange = newScale / initialScale;
+						translateX = initialMidpoint.x - (initialMidpoint.x - initialTranslateX) * scaleChange;
+						translateY = initialMidpoint.y - (initialMidpoint.y - initialTranslateY) * scaleChange;
+						scale = newScale;
+						updateTransform();
+					} else if (e.touches.length === 1 && !wasPinching) {
+						// Single finger pan
+						e.preventDefault();
+						const touch = e.touches[0];
+						const dx = touch.clientX - singleTouchStartX;
+						const dy = touch.clientY - singleTouchStartY;
+						translateX = singleTouchStartTranslateX + dx;
+						translateY = singleTouchStartTranslateY + dy;
+						updateTransform();
 					}
 				}, { passive: false });
 
-				// Double-tap to reset zoom
-				let lastTap = 0;
+				// Double-tap to reset zoom (with proper detection)
+				let lastTapTime = 0;
+				let lastTapX = 0;
+				let lastTapY = 0;
+				const doubleTapThreshold = 300; // ms
+				const doubleTapDistance = 50; // pixels
+
 				container.addEventListener('touchend', function(e) {
-					const now = Date.now();
-					if (now - lastTap < 300 && e.touches.length === 0) {
-						scale = 1;
-						translateX = 0;
-						translateY = 0;
-						updateTransform();
+					// Reset wasPinching when all fingers are lifted
+					if (e.touches.length === 0) {
+						// Small delay to prevent immediate single-touch actions after pinch
+						setTimeout(() => { wasPinching = false; }, 100);
+
+						// Double-tap detection - only for single finger taps
+						if (activeTouchCount === 1) {
+							const now = Date.now();
+							const touch = e.changedTouches[0];
+							const tapX = touch.clientX;
+							const tapY = touch.clientY;
+
+							const timeDiff = now - lastTapTime;
+							const distance = Math.hypot(tapX - lastTapX, tapY - lastTapY);
+
+							if (timeDiff < doubleTapThreshold && distance < doubleTapDistance) {
+								// Double tap detected - reset zoom
+								scale = 1;
+								translateX = 0;
+								translateY = 0;
+								updateTransform();
+								lastTapTime = 0; // Prevent triple-tap
+							} else {
+								lastTapTime = now;
+								lastTapX = tapX;
+								lastTapY = tapY;
+							}
+						}
 					}
-					lastTap = now;
+					activeTouchCount = e.touches.length;
 				});
 			}
 		</script>
