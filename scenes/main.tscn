@@ -1,10 +1,16 @@
-[gd_scene load_steps=2 format=3 uid="uid://cbxnjjjyus5y4"]
+[gd_scene load_steps=3 format=3 uid="uid://cbxnjjjyus5y4"]
 
 [ext_resource type="Texture2D" uid="uid://cpficjyjyhs6g" path="res://assets/map.png" id="1_o5qli"]
+[ext_resource type="Texture2D" uid="uid://vgtoyod621sx" path="res://assets/cross.png" id="2_0wfyh"]
 
 [node name="Main" type="Node2D"]
 
-[node name="Sprite2D" type="Sprite2D" parent="."]
+[node name="Map" type="Sprite2D" parent="."]
 position = Vector2(577, 315.00003)
 scale = Vector2(0.15105137, 0.15105137)
 texture = ExtResource("1_o5qli")
+
+[node name="TeamMarker" type="Sprite2D" parent="."]
+position = Vector2(485.00003, 233.00002)
+scale = Vector2(0.0136817265, 0.0136817265)
+texture = ExtResource("2_0wfyh")
