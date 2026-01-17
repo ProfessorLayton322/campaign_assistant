@@ -7,6 +7,7 @@ on:
     paths:
       - 'web_build/**'
       - 'campaign_data/**'
+      - 'export_templates/**'
       - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
 
@@ -37,6 +38,10 @@ jobs:
           mkdir -p deploy
           cp -r web_build/* deploy/
           cp -r campaign_data deploy/
+
+          # Add zoom functionality
+          cp export_templates/zoom.js deploy/
+          sed -i 's|</body>|<script src="zoom.js"></script></body>|' deploy/index.html
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
