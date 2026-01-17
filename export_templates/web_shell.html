@@ -2,7 +2,7 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8">
-		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 		<meta name="theme-color" content="#1a1a2e">
 		<title>$GODOT_PROJECT_NAME</title>
 		<style>
@@ -30,7 +30,6 @@
 				width: 100%;
 				height: 100%;
 				touch-action: none;
-				transform-origin: center center;
 			}
 			#status {
 				position: absolute;
@@ -101,6 +100,17 @@
 				console.error(err);
 			}
 
+			// Prevent default browser zoom/scroll behaviors
+			document.addEventListener('wheel', function(e) {
+				e.preventDefault();
+			}, { passive: false });
+
+			document.addEventListener('touchmove', function(e) {
+				if (e.touches.length > 1) {
+					e.preventDefault();
+				}
+			}, { passive: false });
+
 			engine.startGame({
 				'onProgress': function (current, total) {
 					if (total > 0) {
@@ -113,194 +123,9 @@
 				},
 			}).then(() => {
 				setStatusMode('hidden');
-				initZoom();
 			}).catch((err) => {
 				displayFailureNotice(err);
 			});
-
-			// Zoom and pan functionality
-			function initZoom() {
-				const canvas = document.getElementById('canvas');
-				const container = document.getElementById('canvas-container');
-
-				let scale = 1;
-				let translateX = 0;
-				let translateY = 0;
-				const minScale = 0.5;
-				const maxScale = 5;
-
-				function updateTransform() {
-					canvas.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
-				}
-
-				// Desktop: Ctrl + mouse wheel zoom
-				container.addEventListener('wheel', function(e) {
-					if (e.ctrlKey) {
-						e.preventDefault();
-
-						const rect = container.getBoundingClientRect();
-						const mouseX = e.clientX - rect.left - rect.width / 2;
-						const mouseY = e.clientY - rect.top - rect.height / 2;
-
-						const delta = e.deltaY > 0 ? 0.9 : 1.1;
-						const newScale = Math.min(maxScale, Math.max(minScale, scale * delta));
-
-						if (newScale !== scale) {
-							const scaleChange = newScale / scale;
-							translateX = mouseX - (mouseX - translateX) * scaleChange;
-							translateY = mouseY - (mouseY - translateY) * scaleChange;
-							scale = newScale;
-							updateTransform();
-						}
-					}
-				}, { passive: false });
-
-				// Desktop: Left-click drag to pan
-				let isDragging = false;
-				let dragStartX = 0;
-				let dragStartY = 0;
-				let dragStartTranslateX = 0;
-				let dragStartTranslateY = 0;
-
-				container.addEventListener('mousedown', function(e) {
-					if (e.button === 0) { // Left click only
-						isDragging = true;
-						dragStartX = e.clientX;
-						dragStartY = e.clientY;
-						dragStartTranslateX = translateX;
-						dragStartTranslateY = translateY;
-						container.style.cursor = 'grabbing';
-						e.preventDefault();
-					}
-				});
-
-				document.addEventListener('mousemove', function(e) {
-					if (isDragging) {
-						const dx = e.clientX - dragStartX;
-						const dy = e.clientY - dragStartY;
-						translateX = dragStartTranslateX + dx;
-						translateY = dragStartTranslateY + dy;
-						updateTransform();
-					}
-				});
-
-				document.addEventListener('mouseup', function(e) {
-					if (isDragging) {
-						isDragging = false;
-						container.style.cursor = 'grab';
-					}
-				});
-
-				// Set initial cursor style
-				container.style.cursor = 'grab';
-
-				// Mobile: Pinch to zoom and single-finger pan
-				let initialDistance = 0;
-				let initialScale = 1;
-				let initialTranslateX = 0;
-				let initialTranslateY = 0;
-				let initialMidpoint = { x: 0, y: 0 };
-				let activeTouchCount = 0;
-				let singleTouchStartX = 0;
-				let singleTouchStartY = 0;
-				let singleTouchStartTranslateX = 0;
-				let singleTouchStartTranslateY = 0;
-				let wasPinching = false;
-
-				container.addEventListener('touchstart', function(e) {
-					activeTouchCount = e.touches.length;
-
-					if (e.touches.length === 2) {
-						e.preventDefault();
-						wasPinching = true;
-						const touch1 = e.touches[0];
-						const touch2 = e.touches[1];
-						initialDistance = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
-						initialScale = scale;
-						initialTranslateX = translateX;
-						initialTranslateY = translateY;
-
-						const rect = container.getBoundingClientRect();
-						initialMidpoint = {
-							x: (touch1.clientX + touch2.clientX) / 2 - rect.left - rect.width / 2,
-							y: (touch1.clientY + touch2.clientY) / 2 - rect.top - rect.height / 2
-						};
-					} else if (e.touches.length === 1 && !wasPinching) {
-						// Single finger pan - only if not transitioning from pinch
-						const touch = e.touches[0];
-						singleTouchStartX = touch.clientX;
-						singleTouchStartY = touch.clientY;
-						singleTouchStartTranslateX = translateX;
-						singleTouchStartTranslateY = translateY;
-					}
-				}, { passive: false });
-
-				container.addEventListener('touchmove', function(e) {
-					if (e.touches.length === 2) {
-						e.preventDefault();
-						const touch1 = e.touches[0];
-						const touch2 = e.touches[1];
-						const currentDistance = Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
-
-						const newScale = Math.min(maxScale, Math.max(minScale, initialScale * (currentDistance / initialDistance)));
-
-						const scaleChange = newScale / initialScale;
-						translateX = initialMidpoint.x - (initialMidpoint.x - initialTranslateX) * scaleChange;
-						translateY = initialMidpoint.y - (initialMidpoint.y - initialTranslateY) * scaleChange;
-						scale = newScale;
-						updateTransform();
-					} else if (e.touches.length === 1 && !wasPinching) {
-						// Single finger pan
-						e.preventDefault();
-						const touch = e.touches[0];
-						const dx = touch.clientX - singleTouchStartX;
-						const dy = touch.clientY - singleTouchStartY;
-						translateX = singleTouchStartTranslateX + dx;
-						translateY = singleTouchStartTranslateY + dy;
-						updateTransform();
-					}
-				}, { passive: false });
-
-				// Double-tap to reset zoom (with proper detection)
-				let lastTapTime = 0;
-				let lastTapX = 0;
-				let lastTapY = 0;
-				const doubleTapThreshold = 300; // ms
-				const doubleTapDistance = 50; // pixels
-
-				container.addEventListener('touchend', function(e) {
-					// Reset wasPinching when all fingers are lifted
-					if (e.touches.length === 0) {
-						// Small delay to prevent immediate single-touch actions after pinch
-						setTimeout(() => { wasPinching = false; }, 100);
-
-						// Double-tap detection - only for single finger taps
-						if (activeTouchCount === 1) {
-							const now = Date.now();
-							const touch = e.changedTouches[0];
-							const tapX = touch.clientX;
-							const tapY = touch.clientY;
-
-							const timeDiff = now - lastTapTime;
-							const distance = Math.hypot(tapX - lastTapX, tapY - lastTapY);
-
-							if (timeDiff < doubleTapThreshold && distance < doubleTapDistance) {
-								// Double tap detected - reset zoom
-								scale = 1;
-								translateX = 0;
-								translateY = 0;
-								updateTransform();
-								lastTapTime = 0; // Prevent triple-tap
-							} else {
-								lastTapTime = now;
-								lastTapX = tapX;
-								lastTapY = tapY;
-							}
-						}
-					}
-					activeTouchCount = e.touches.length;
-				});
-			}
 		</script>
 	</body>
 </html>
