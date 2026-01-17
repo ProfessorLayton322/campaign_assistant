@@ -4,15 +4,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **Godot 4.5 editor plugin** that integrates Godot with Claude AI via the Model Context Protocol (MCP). The plugin creates a WebSocket server that allows external tools to remotely control the Godot editor - manipulating scenes, nodes, scripts, and project settings.
+A **TTRPG Campaign Assistant** built with Godot 4.5 that displays an interactive campaign map with team markers. The web app allows campaign managers to track party position on a custom map, with positions stored in JSON for easy updates without rebuilding.
+
+The project also includes a **Godot MCP plugin** that integrates with Claude AI via the Model Context Protocol, allowing remote editor control through a WebSocket server.
+
+## Requirements
+
+**IMPORTANT: Use only Godot 4.5 installed from Steam.** Do not use other Godot versions or installation sources.
 
 ## Running the Project
 
-Open in Godot 4.5 editor. The MCP plugin auto-initializes and starts a WebSocket server on port 9080. A control panel in the editor UI allows starting/stopping the server.
+1. Open the project in Godot 4.5 (Steam version)
+2. The MCP plugin auto-initializes and starts a WebSocket server on port 9080
+3. Run the main scene to view the campaign map with markers
+4. For web builds, export to `web_build/` directory
 
 ## Architecture
 
-### Three-Layer Design
+### Campaign Assistant
+
+- `scenes/main.tscn` - Main scene with map display and marker overlay
+- `scenes/main.gd` - Handles map loading, campaign data fetching (local/web), and marker positioning
+- `campaign_data/campaign.json` - Team position and campaign metadata (editable without rebuild)
+- `assets/map.png` - Campaign map image
+- `export_templates/web_shell.html` - Custom web shell with zoom support
+
+### MCP Plugin (Three-Layer Design)
 
 1. **WebSocket Server** (`addons/godot_mcp/mcp_server.gd`) - Handles TCP/WebSocket connections, parses JSON, supports both JSON-RPC 2.0 and legacy formats
 2. **Command Handler** (`addons/godot_mcp/command_handler.gd`) - Routes commands to specialized processors
@@ -50,5 +67,16 @@ WebSocket receives JSON → emits `command_received` → handler routes to proce
 ## Key Files
 
 - `project.godot` - GL Compatibility renderer, main scene at `scenes/main.tscn`
+- `scenes/main.gd` - Main game logic with map and marker positioning
+- `campaign_data/campaign.json` - Campaign state (team position as normalized 0-1 coordinates)
+- `export_templates/web_shell.html` - Custom HTML template for web exports
 - `addons/godot_mcp/plugin.cfg` - Plugin metadata (version 1.0.0)
 - `addons/godot_mcp/utils/` - Shared utilities for node trees, resources, scripts
+- `web_build/` - Exported web build (not tracked in git)
+
+## Web Build
+
+The web export uses a custom shell template with:
+- Zoom support (Ctrl+scroll on desktop, pinch on mobile)
+- Clean loading screen
+- Automatic campaign.json fetching for live updates
