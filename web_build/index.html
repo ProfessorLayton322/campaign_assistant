@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+		<meta name="theme-color" content="#1a1a2e">
+		<title>campaign_assistant</title>
+		<style>
+			* {
+				margin: 0;
+				padding: 0;
+				box-sizing: border-box;
+			}
+			html, body {
+				width: 100%;
+				height: 100%;
+				overflow: hidden;
+				background-color: #1a1a2e;
+			}
+			#canvas {
+				display: block;
+				width: 100%;
+				height: 100%;
+				touch-action: none;
+			}
+			#status {
+				position: absolute;
+				left: 50%;
+				top: 50%;
+				transform: translate(-50%, -50%);
+				text-align: center;
+				color: #ffffff;
+				font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+			}
+			#status-progress {
+				width: 300px;
+				height: 8px;
+				background-color: #333;
+				border-radius: 4px;
+				margin: 20px auto;
+				overflow: hidden;
+			}
+			#status-progress-inner {
+				width: 0%;
+				height: 100%;
+				background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+				border-radius: 4px;
+				transition: width 0.3s ease;
+			}
+			#status-notice {
+				margin-top: 10px;
+				font-size: 14px;
+				opacity: 0.7;
+			}
+		</style>
+		<script src="coi-serviceworker.min.js"></script>
+		<link id="-gd-engine-icon" rel="icon" type="image/png" href="index.icon.png" />
+<link rel="apple-touch-icon" href="index.apple-touch-icon.png"/>
+<link rel="manifest" href="index.manifest.json">
+
+	</head>
+	<body>
+		<canvas id="canvas"></canvas>
+		<div id="status">
+			<div id="status-progress">
+				<div id="status-progress-inner"></div>
+			</div>
+			<div id="status-notice">Loading...</div>
+		</div>
+		<script src="$GODOT_BASENAME.js"></script>
+		<script>
+			const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":true,"executable":"index","experimentalVK":false,"fileSizes":{"index.pck":6873320,"index.wasm":38034280},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4,"serviceWorker":"index.service.worker.js"};
+			const engine = new Engine(GODOT_CONFIG);
+
+			const statusProgress = document.getElementById('status-progress-inner');
+			const statusNotice = document.getElementById('status-notice');
+			const status = document.getElementById('status');
+
+			function setStatusMode(mode) {
+				if (mode === 'hidden') {
+					status.style.display = 'none';
+				} else {
+					status.style.display = 'block';
+				}
+			}
+
+			function setStatusNotice(text) {
+				statusNotice.textContent = text;
+			}
+
+			function displayFailureNotice(err) {
+				setStatusNotice('Error: ' + (err.message || err));
+				console.error(err);
+			}
+
+			engine.startGame({
+				'onProgress': function (current, total) {
+					if (total > 0) {
+						const percent = (current / total) * 100;
+						statusProgress.style.width = percent + '%';
+						setStatusNotice('Loading... ' + Math.round(percent) + '%');
+					} else {
+						setStatusNotice('Loading...');
+					}
+				},
+			}).then(() => {
+				setStatusMode('hidden');
+			}).catch((err) => {
+				displayFailureNotice(err);
+			});
+		</script>
+	</body>
+</html>
+

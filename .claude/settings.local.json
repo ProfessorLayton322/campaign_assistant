@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(tree:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(cmd.exe /c \"\"\"C:\\\\Program Files \\(x86\\)\\\\Steam\\\\steamapps\\\\common\\\\Godot Engine\\\\godot.windows.opt.tools.64.exe\"\" --headless --export-release \"\"Web\"\" \"\"C:\\\\Users\\\\79169\\\\Desktop\\\\campaign_assistant\\\\web_build\\\\index.html\"\" --path \"\"C:\\\\Users\\\\79169\\\\Desktop\\\\campaign_assistant\"\"\")",
+      "Bash(powershell.exe:*)"
     ]
   }
 }
