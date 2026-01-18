@@ -322,7 +322,9 @@ func _load_campaign_data_web() -> void:
 	add_child(http_request)
 	http_request.request_completed.connect(_on_web_request_completed)
 
-	var error = http_request.request(CAMPAIGN_DATA_WEB_URL)
+	# Add cache-busting query parameter
+	var url = CAMPAIGN_DATA_WEB_URL + "?t=" + str(Time.get_unix_time_from_system())
+	var error = http_request.request(url)
 	if error != OK:
 		push_error("Failed to start HTTP request: " + str(error))
 		_use_default_data()
@@ -333,9 +335,8 @@ func _on_web_request_completed(result: int, response_code: int, _headers: Packed
 	http_request.queue_free()
 
 	if result != HTTPRequest.RESULT_SUCCESS or response_code != 200:
-		push_warning("Failed to fetch campaign data (result: %d, code: %d), using defaults" % [result, response_code])
-		_use_default_data()
-		_update_marker_positions()
+		push_warning("Failed to fetch campaign data (result: %d, code: %d), trying bundled data" % [result, response_code])
+		_load_campaign_data_bundled()
 		return
 
 	var json_string = body.get_string_from_utf8()
@@ -352,12 +353,35 @@ func _on_web_request_completed(result: int, response_code: int, _headers: Packed
 
 
 func _load_campaign_data_local() -> void:
-	if not FileAccess.file_exists(CAMPAIGN_DATA_PATH):
-		push_warning("Campaign data file not found at: " + CAMPAIGN_DATA_PATH)
+	# Try to find file relative to executable/project first (allows external editing)
+	var external_path = OS.get_executable_path().get_base_dir().path_join("campaign_data/campaign.json")
+
+	# If running in editor, OS.get_executable_path() is the editor executable
+	# But in editor, res:// works fine for source editing.
+	# This check is primarily for exported builds.
+	if FileAccess.file_exists(external_path):
+		_load_campaign_data_from_file(external_path)
+	else:
+		_load_campaign_data_bundled()
+
+
+func _load_campaign_data_bundled() -> void:
+	if FileAccess.file_exists(CAMPAIGN_DATA_PATH):
+		_load_campaign_data_from_file(CAMPAIGN_DATA_PATH)
+	else:
+		push_warning("Bundled campaign data not found")
 		_use_default_data()
+		_update_marker_positions()
+
+
+func _load_campaign_data_from_file(path: String) -> void:
+	var file = FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		push_error("Failed to open campaign data file: " + path)
+		_use_default_data()
+		_update_marker_positions()
 		return
 
-	var file = FileAccess.open(CAMPAIGN_DATA_PATH, FileAccess.READ)
 	var json_string = file.get_as_text()
 	file.close()
 
@@ -366,9 +390,11 @@ func _load_campaign_data_local() -> void:
 	if error != OK:
 		push_error("Failed to parse campaign data: " + json.get_error_message())
 		_use_default_data()
+		_update_marker_positions()
 		return
 
 	campaign_data = json.data
+	_update_marker_positions()
 
 
 func _use_default_data() -> void:
