@@ -38,6 +38,7 @@ var gesture_state: GestureState = GestureState.NONE
 var gesture_start_pos: Vector2 = Vector2.ZERO
 var accumulated_pan: Vector2 = Vector2.ZERO
 var zoom_locked: bool = false  # Prevents zoom changes during gesture transitions
+var pinch_needs_processing: bool = false  # Defer pinch to once per frame
 
 # Camera state
 var target_camera_pos: Vector2 = Vector2.ZERO
@@ -103,7 +104,10 @@ func _on_viewport_size_changed() -> void:
 
 
 func _process(_delta: float) -> void:
-	pass
+	# Process pinch zoom once per frame (after all touch events have updated positions)
+	if pinch_needs_processing and touch_points.size() == 2:
+		_handle_pinch_gesture()
+		pinch_needs_processing = false
 
 
 func _input(event: InputEvent) -> void:
@@ -179,6 +183,7 @@ func _on_touch_released(touch_event: InputEventScreenTouch) -> void:
 		camera.zoom = Vector2(current_zoom, current_zoom)  # Explicitly reapply zoom
 		target_camera_pos = camera.position
 		zoom_locked = false  # Unlock after all fingers released
+		pinch_needs_processing = false
 		_clamp_camera_position()
 	elif touch_points.size() == 1:
 		# Went from 2 fingers to 1 - lock zoom to prevent any changes during transition
@@ -190,6 +195,7 @@ func _on_touch_released(touch_event: InputEventScreenTouch) -> void:
 		gesture_start_pos = remaining_pos
 		accumulated_pan = Vector2.ZERO
 		target_camera_pos = camera.position
+		pinch_needs_processing = false
 		# Use a deferred call to unlock zoom after the current frame
 		_unlock_zoom_deferred.call_deferred()
 
@@ -209,7 +215,8 @@ func _on_touch_drag(drag_event: InputEventScreenDrag) -> void:
 	if touch_points.size() == 1:
 		_handle_single_touch_drag(drag_event)
 	elif touch_points.size() == 2:
-		_handle_pinch_gesture()
+		# Mark pinch for deferred processing (once per frame, after all finger positions updated)
+		pinch_needs_processing = true
 
 
 func _handle_single_touch_drag(drag_event: InputEventScreenDrag) -> void:
