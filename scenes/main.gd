@@ -74,8 +74,9 @@ func _detect_mobile_device() -> bool:
 		return true
 	# On web, use JavaScript to detect mobile browser
 	if OS.has_feature("web"):
-		var js_result = JavaScriptBridge.eval("window.isMobileDevice === true")
-		return js_result == true
+		# Use numeric return (1/0) to avoid bool conversion issues with JavaScriptBridge
+		var js_result = JavaScriptBridge.eval("window.isMobileDevice ? 1 : 0")
+		return js_result == 1
 	return false
 
 
