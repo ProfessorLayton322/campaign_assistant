@@ -4,3 +4,6 @@
 
 # Local Claude Code settings
 .claude/settings.local.json
+
+# Campaign data in web_build (source of truth is campaign_data/)
+web_build/campaign_data/
