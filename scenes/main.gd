@@ -37,6 +37,7 @@ enum GestureState { NONE, PENDING, PANNING, ZOOMING }
 var gesture_state: GestureState = GestureState.NONE
 var gesture_start_pos: Vector2 = Vector2.ZERO
 var accumulated_pan: Vector2 = Vector2.ZERO
+var zoom_locked: bool = false  # Prevents zoom changes during gesture transitions
 
 # Camera state
 var target_camera_pos: Vector2 = Vector2.ZERO
@@ -168,24 +169,38 @@ func _on_touch_pressed(touch_event: InputEventScreenTouch) -> void:
 func _on_touch_released(touch_event: InputEventScreenTouch) -> void:
 	touch_points.erase(touch_event.index)
 
+	# Always persist the current zoom state when any finger is released
+	var persisted_zoom = camera.zoom.x
+
 	if touch_points.size() == 0:
-		# All fingers released - persist the zoom
+		# All fingers released - persist the zoom and lock it
 		gesture_state = GestureState.NONE
-		current_zoom = camera.zoom.x  # Save the current zoom level
+		current_zoom = persisted_zoom
+		camera.zoom = Vector2(current_zoom, current_zoom)  # Explicitly reapply zoom
 		target_camera_pos = camera.position
+		zoom_locked = false  # Unlock after all fingers released
 		_clamp_camera_position()
 	elif touch_points.size() == 1:
-		# Went from 2 fingers to 1 - save zoom and reset to pending for pan
-		current_zoom = camera.zoom.x  # Persist zoom before transitioning
+		# Went from 2 fingers to 1 - lock zoom to prevent any changes during transition
+		zoom_locked = true
+		current_zoom = persisted_zoom
+		camera.zoom = Vector2(current_zoom, current_zoom)  # Explicitly reapply zoom
 		gesture_state = GestureState.PENDING
 		var remaining_pos = touch_points.values()[0]
 		gesture_start_pos = remaining_pos
 		accumulated_pan = Vector2.ZERO
 		target_camera_pos = camera.position
+		# Use a deferred call to unlock zoom after the current frame
+		_unlock_zoom_deferred.call_deferred()
 
 	# Reset pinch tracking
 	initial_pinch_distance = 0.0
 	last_pinch_distance = 0.0
+	pinch_zoom_at_start = current_zoom  # Update baseline for next pinch
+
+
+func _unlock_zoom_deferred() -> void:
+	zoom_locked = false
 
 
 func _on_touch_drag(drag_event: InputEventScreenDrag) -> void:
@@ -214,6 +229,10 @@ func _handle_single_touch_drag(drag_event: InputEventScreenDrag) -> void:
 
 
 func _handle_pinch_gesture() -> void:
+	# Don't process pinch zoom if zoom is locked during gesture transition
+	if zoom_locked:
+		return
+
 	var pinch_distance = _get_pinch_distance()
 	var pinch_center = _get_pinch_center()
 
