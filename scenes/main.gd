@@ -317,25 +317,42 @@ func _load_campaign_data() -> void:
 		_update_marker_positions()
 
 
-func _load_campaign_data_web() -> void:
+func _load_campaign_data_web(attempt: int = 0) -> void:
+	if http_request != null:
+		http_request.queue_free()
+
 	http_request = HTTPRequest.new()
 	add_child(http_request)
-	http_request.request_completed.connect(_on_web_request_completed)
+	http_request.request_completed.connect(_on_web_request_completed.bind(attempt))
 
 	# Add cache-busting query parameter
 	var url = CAMPAIGN_DATA_WEB_URL + "?t=" + str(Time.get_unix_time_from_system())
+	print("Fetching campaign data from: ", url, " (Attempt: ", attempt + 1, ")")
+
 	var error = http_request.request(url)
 	if error != OK:
 		push_error("Failed to start HTTP request: " + str(error))
-		_use_default_data()
-		_update_marker_positions()
+		if attempt < 3:
+			print("Retrying in 1s...")
+			await get_tree().create_timer(1.0).timeout
+			_load_campaign_data_web(attempt + 1)
+		else:
+			_load_campaign_data_bundled()
 
 
-func _on_web_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+func _on_web_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray, attempt: int) -> void:
 	http_request.queue_free()
+	http_request = null
 
 	if result != HTTPRequest.RESULT_SUCCESS or response_code != 200:
-		push_warning("Failed to fetch campaign data (result: %d, code: %d), trying bundled data" % [result, response_code])
+		push_warning("Failed to fetch campaign data (result: %d, code: %d)" % [result, response_code])
+		if attempt < 3:
+			print("Retrying in 1s...")
+			await get_tree().create_timer(1.0).timeout
+			_load_campaign_data_web(attempt + 1)
+			return
+
+		push_warning("Max retries reached, trying bundled data")
 		_load_campaign_data_bundled()
 		return
 
@@ -344,8 +361,7 @@ func _on_web_request_completed(result: int, response_code: int, _headers: Packed
 	var error = json.parse(json_string)
 	if error != OK:
 		push_error("Failed to parse campaign data: " + json.get_error_message())
-		_use_default_data()
-		_update_marker_positions()
+		_load_campaign_data_bundled()
 		return
 
 	campaign_data = json.data
