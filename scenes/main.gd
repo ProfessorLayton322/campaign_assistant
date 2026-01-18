@@ -18,6 +18,8 @@ var base_zoom: float = 1.0  # The "100%" zoom level
 @onready var map_sprite: Sprite2D = $Map
 @onready var team_marker: Sprite2D = $TeamMarker
 @onready var camera: Camera2D = $Camera2D
+@onready var zoom_slider_container: PanelContainer = $UILayer/ZoomSliderContainer
+@onready var zoom_slider: VSlider = $UILayer/ZoomSliderContainer/MarginContainer/VBoxContainer/ZoomSlider
 
 var campaign_data: Dictionary = {}
 var map_size: Vector2 = Vector2.ZERO
@@ -42,24 +44,70 @@ var current_zoom: float = 1.0
 var camera_initialized: bool = false
 var last_viewport_size: Vector2 = Vector2.ZERO
 
-# JavaScript callback for zoom slider (web only)
-var js_zoom_callback: JavaScriptObject = null
+# Platform detection
+var is_mobile: bool = false
 
 
 func _ready() -> void:
+	# Detect if we're on mobile/touch device
+	is_mobile = _detect_mobile_device()
+
+	# Configure zoom slider visibility based on platform
+	_setup_zoom_slider()
+
 	# On web, defer camera setup to ensure viewport is properly sized
 	if OS.has_feature("web"):
 		# Wait multiple frames for mobile browsers to settle
 		await get_tree().process_frame
 		await get_tree().process_frame
 		await get_tree().process_frame
-		# Set up JavaScript bridge for zoom slider
-		_setup_js_zoom_bridge()
 	_setup_camera()
 	_load_campaign_data()
 
 	# Connect to viewport size changes for handling orientation changes
 	get_viewport().size_changed.connect(_on_viewport_size_changed)
+
+
+func _detect_mobile_device() -> bool:
+	# Check for mobile platforms
+	if OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios"):
+		return true
+	# On web, check for touch capability
+	if OS.has_feature("web"):
+		# Web on mobile usually has touch, we'll show slider on all web builds
+		# and let users use it if they want
+		return true
+	return false
+
+
+func _setup_zoom_slider() -> void:
+	if is_mobile:
+		# Show slider on mobile
+		zoom_slider_container.visible = true
+		# Connect slider signal
+		zoom_slider.value_changed.connect(_on_zoom_slider_changed)
+	else:
+		# Hide slider on desktop
+		zoom_slider_container.visible = false
+
+
+func _on_zoom_slider_changed(value: float) -> void:
+	# Slider value is 100-200, representing percentage
+	# 100 = base zoom (100%), 200 = 2x base zoom (200%)
+	var zoom_multiplier = value / 100.0
+	var new_zoom = clamp(base_zoom * zoom_multiplier, MIN_ZOOM, MAX_ZOOM)
+
+	if abs(new_zoom - current_zoom) > 0.0001:
+		# Zoom centered on screen
+		var viewport_size = get_viewport().get_visible_rect().size
+		var screen_center = viewport_size / 2.0
+		var world_center = camera.position
+
+		# Apply new zoom
+		current_zoom = new_zoom
+		camera.zoom = Vector2(current_zoom, current_zoom)
+		target_camera_pos = camera.position
+		_clamp_camera_position()
 
 
 func _setup_camera() -> void:
@@ -91,6 +139,10 @@ func _setup_camera() -> void:
 	camera.make_current()
 	camera_initialized = true
 
+	# Reset slider to 100%
+	if is_mobile and zoom_slider:
+		zoom_slider.set_value_no_signal(100.0)
+
 
 func _on_viewport_size_changed() -> void:
 	if not camera_initialized or map_size == Vector2.ZERO:
@@ -114,8 +166,8 @@ func _input(event: InputEvent) -> void:
 	if not camera_initialized:
 		return
 
-	# Mouse wheel zoom (desktop)
-	if event is InputEventMouseButton:
+	# Mouse wheel zoom (desktop only - not on mobile)
+	if not is_mobile and event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
 		if mouse_event.pressed:
 			if mouse_event.button_index == MOUSE_BUTTON_WHEEL_UP:
@@ -130,7 +182,7 @@ func _input(event: InputEvent) -> void:
 				is_mouse_panning = false
 
 	# Mouse drag pan (desktop)
-	if event is InputEventMouseMotion and is_mouse_panning:
+	if not is_mobile and event is InputEventMouseMotion and is_mouse_panning:
 		var current_pos = get_global_mouse_position()
 		var delta = mouse_pan_start_pos - current_pos
 		camera.position += delta
@@ -138,7 +190,8 @@ func _input(event: InputEvent) -> void:
 		_clamp_camera_position()
 
 	# Touch events for mobile
-	_handle_touch_event(event)
+	if is_mobile:
+		_handle_touch_event(event)
 
 
 func _handle_touch_event(event: InputEvent) -> void:
@@ -201,42 +254,6 @@ func _handle_single_touch_drag(drag_event: InputEventScreenDrag) -> void:
 		# Apply pan - divide by zoom since camera.zoom affects world scale
 		var delta = drag_event.relative / current_zoom
 		camera.position -= delta
-		target_camera_pos = camera.position
-		_clamp_camera_position()
-
-
-# JavaScript bridge for zoom slider (web only)
-func _setup_js_zoom_bridge() -> void:
-	if not OS.has_feature("web"):
-		return
-
-	# Create callback that JavaScript can call when slider changes
-	js_zoom_callback = JavaScriptBridge.create_callback(_on_js_zoom_change)
-	var window = JavaScriptBridge.get_interface("window")
-	window.godotSetZoomMultiplier = js_zoom_callback
-
-
-func _on_js_zoom_change(args: Array) -> void:
-	if args.size() == 0:
-		return
-
-	var zoom_multiplier: float = args[0]
-	# Multiplier: 1.0 = 100% (base zoom), 2.0 = 200% (2x base zoom)
-	var new_zoom = clamp(base_zoom * zoom_multiplier, MIN_ZOOM, MAX_ZOOM)
-
-	if abs(new_zoom - current_zoom) > 0.0001:
-		# Zoom centered on screen
-		var viewport_size = get_viewport().get_visible_rect().size
-		var screen_center = viewport_size / 2.0
-		var world_center = camera.position + (screen_center - viewport_size / 2.0) / current_zoom
-
-		# Calculate position offset to maintain center
-		var zoom_ratio = new_zoom / current_zoom
-		var offset = world_center - camera.position
-		camera.position = world_center - offset * zoom_ratio
-
-		current_zoom = new_zoom
-		camera.zoom = Vector2(current_zoom, current_zoom)
 		target_camera_pos = camera.position
 		_clamp_camera_position()
 
