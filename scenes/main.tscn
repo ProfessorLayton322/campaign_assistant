@@ -53,7 +53,7 @@ theme_override_constants/separation = 8
 [node name="LabelTop" type="Label" parent="UILayer/ZoomSliderContainer/MarginContainer/VBoxContainer"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 12
-text = "100%"
+text = "200%"
 horizontal_alignment = 1
 
 [node name="ZoomSlider" type="VSlider" parent="UILayer/ZoomSliderContainer/MarginContainer/VBoxContainer"]
@@ -66,5 +66,5 @@ value = 100.0
 [node name="LabelBottom" type="Label" parent="UILayer/ZoomSliderContainer/MarginContainer/VBoxContainer"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 12
-text = "200%"
+text = "100%"
 horizontal_alignment = 1
