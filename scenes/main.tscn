@@ -23,6 +23,18 @@ centered = false
 texture_filter = 2
 texture = ExtResource("2_0wfyh")
 
+[node name="HexPointA" type="Marker2D" parent="."]
+position = Vector2(1784, 1059)
+
+[node name="HexPointB" type="Marker2D" parent="."]
+position = Vector2(1869, 1059)
+
+[node name="HexPointC" type="Marker2D" parent="."]
+position = Vector2(1826, 985)
+
+[node name="HexOrigin" type="Marker2D" parent="."]
+position = Vector2(3230, 1454)
+
 [node name="Camera2D" type="Camera2D" parent="."]
 
 [node name="UILayer" type="CanvasLayer" parent="."]

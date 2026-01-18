@@ -21,6 +21,12 @@ var base_zoom: float = 1.0  # The "100%" zoom level
 @onready var zoom_slider_container: PanelContainer = $UILayer/ZoomSliderContainer
 @onready var zoom_slider: VSlider = $UILayer/ZoomSliderContainer/MarginContainer/VBoxContainer/ZoomSlider
 
+# Hex grid reference points
+@onready var hex_point_a: Marker2D = $HexPointA
+@onready var hex_point_b: Marker2D = $HexPointB
+@onready var hex_point_c: Marker2D = $HexPointC
+@onready var hex_origin: Marker2D = $HexOrigin
+
 var campaign_data: Dictionary = {}
 var map_size: Vector2 = Vector2.ZERO
 var http_request: HTTPRequest
@@ -367,7 +373,7 @@ func _load_campaign_data_local() -> void:
 
 func _use_default_data() -> void:
 	campaign_data = {
-		"team_position": {"x": 0.42, "y": 0.37}
+		"team_coordinates": {"x": 0, "y": 0}
 	}
 
 
@@ -377,11 +383,15 @@ func _update_marker_positions() -> void:
 
 	map_size = map_sprite.texture.get_size()
 
-	var team_pos = campaign_data.get("team_position", {"x": 0.5, "y": 0.5})
-	var normalized_pos = Vector2(team_pos.get("x", 0.5), team_pos.get("y", 0.5))
+	# Calculate position using hex coordinates: O + X * AB + Y * AC
+	var team_coords = campaign_data.get("team_coordinates", {"x": 0, "y": 0})
+	var hex_x: int = int(team_coords.get("x", 0))
+	var hex_y: int = int(team_coords.get("y", 0))
 
-	# Position marker in world coordinates
-	team_marker.position = normalized_pos * map_size
+	var vec_ab: Vector2 = hex_point_b.position - hex_point_a.position
+	var vec_ac: Vector2 = hex_point_c.position - hex_point_a.position
+
+	team_marker.position = hex_origin.position + hex_x * vec_ab + hex_y * vec_ac
 
 	# Scale marker to fixed world size
 	if team_marker.texture:

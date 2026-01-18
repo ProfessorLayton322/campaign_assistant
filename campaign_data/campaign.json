@@ -1,7 +1,7 @@
 {
   "campaign_name": "TTRPG Campaign",
-  "team_position": {
-    "x": 0.42,
-    "y": 0.37
+  "team_coordinates": {
+	"x": 2,
+	"y": -2
   }
 }
