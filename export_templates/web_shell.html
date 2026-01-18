@@ -78,6 +78,64 @@
 				font-size: 14px;
 				opacity: 0.7;
 			}
+			/* Mobile zoom slider - hidden by default, shown only on touch devices */
+			#zoom-slider-container {
+				display: none;
+				position: fixed;
+				right: 20px;
+				top: 50%;
+				transform: translateY(-50%);
+				width: 44px;
+				height: 200px;
+				z-index: 1000;
+				background: rgba(0, 0, 0, 0.5);
+				border-radius: 22px;
+				padding: 10px 0;
+				touch-action: none;
+			}
+			#zoom-slider-container.visible {
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				justify-content: space-between;
+			}
+			#zoom-slider {
+				-webkit-appearance: none;
+				appearance: none;
+				width: 160px;
+				height: 6px;
+				background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+				border-radius: 3px;
+				outline: none;
+				transform: rotate(-90deg);
+				transform-origin: center center;
+				margin: 0;
+			}
+			#zoom-slider::-webkit-slider-thumb {
+				-webkit-appearance: none;
+				appearance: none;
+				width: 28px;
+				height: 28px;
+				background: #ffffff;
+				border-radius: 50%;
+				cursor: pointer;
+				box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+			}
+			#zoom-slider::-moz-range-thumb {
+				width: 28px;
+				height: 28px;
+				background: #ffffff;
+				border-radius: 50%;
+				cursor: pointer;
+				border: none;
+				box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+			}
+			.zoom-label {
+				color: #ffffff;
+				font-size: 11px;
+				font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+				opacity: 0.8;
+			}
 		</style>
 		<script src="coi-serviceworker.min.js"></script>
 		$GODOT_HEAD_INCLUDE
@@ -85,6 +143,11 @@
 	<body>
 		<div id="canvas-container">
 			<canvas id="canvas"></canvas>
+		</div>
+		<div id="zoom-slider-container">
+			<span class="zoom-label">100%</span>
+			<input type="range" id="zoom-slider" min="0" max="100" value="0" orient="vertical">
+			<span class="zoom-label">200%</span>
 		</div>
 		<div id="status">
 			<div id="status-progress">
@@ -100,6 +163,16 @@
 			const statusProgress = document.getElementById('status-progress-inner');
 			const statusNotice = document.getElementById('status-notice');
 			const status = document.getElementById('status');
+			const zoomSliderContainer = document.getElementById('zoom-slider-container');
+			const zoomSlider = document.getElementById('zoom-slider');
+
+			// Mobile detection
+			function isMobileDevice() {
+				return ('ontouchstart' in window) ||
+					(navigator.maxTouchPoints > 0) ||
+					(navigator.msMaxTouchPoints > 0) ||
+					/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+			}
 
 			function setStatusMode(mode) {
 				if (mode === 'hidden') {
@@ -117,6 +190,38 @@
 				setStatusNotice('Error: ' + (err.message || err));
 				console.error(err);
 			}
+
+			// Expose zoom control function for Godot to call
+			window.setZoomSliderValue = function(value) {
+				// value is 0-100, where 0 = 100% zoom (top), 100 = 200% zoom (bottom)
+				zoomSlider.value = value;
+			};
+
+			// Handle slider changes and communicate with Godot
+			zoomSlider.addEventListener('input', function(e) {
+				// Slider value: 0 = top (100% zoom), 100 = bottom (200% zoom)
+				const sliderValue = parseFloat(e.target.value);
+				// Convert to zoom multiplier: 0 -> 1.0, 100 -> 2.0
+				const zoomMultiplier = 1.0 + (sliderValue / 100.0);
+
+				// Send to Godot via global function
+				if (window.godotSetZoomMultiplier) {
+					window.godotSetZoomMultiplier(zoomMultiplier);
+				}
+			});
+
+			// Prevent touch events on slider from propagating to canvas
+			zoomSliderContainer.addEventListener('touchstart', function(e) {
+				e.stopPropagation();
+			}, { passive: true });
+
+			zoomSliderContainer.addEventListener('touchmove', function(e) {
+				e.stopPropagation();
+			}, { passive: true });
+
+			zoomSliderContainer.addEventListener('touchend', function(e) {
+				e.stopPropagation();
+			}, { passive: true });
 
 			// Prevent browser gesture behaviors while allowing Godot to receive touch events
 			// Using capture phase to intercept before default handling but after Godot's listeners
@@ -188,6 +293,10 @@
 				},
 			}).then(() => {
 				setStatusMode('hidden');
+				// Show zoom slider on mobile devices after game loads
+				if (isMobileDevice()) {
+					zoomSliderContainer.classList.add('visible');
+				}
 			}).catch((err) => {
 				displayFailureNotice(err);
 			});

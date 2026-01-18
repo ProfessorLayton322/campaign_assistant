@@ -10,9 +10,10 @@ const MAX_ZOOM = 5.0  # Zoomed in (see detail)
 const ZOOM_SPEED = 0.1
 
 # Mobile touch settings
-const PINCH_ZOOM_SENSITIVITY = 0.005
 const PAN_DEAD_ZONE = 3.0  # Pixels before pan starts
-const PINCH_DEAD_ZONE = 5.0  # Pixels before pinch zoom activates
+
+# Base zoom for slider calculation (set during camera setup)
+var base_zoom: float = 1.0  # The "100%" zoom level
 
 @onready var map_sprite: Sprite2D = $Map
 @onready var team_marker: Sprite2D = $TeamMarker
@@ -26,25 +27,23 @@ var http_request: HTTPRequest
 var is_mouse_panning: bool = false
 var mouse_pan_start_pos: Vector2 = Vector2.ZERO
 
-# Touch gesture tracking
+# Touch gesture tracking (pan only on mobile)
 var touch_points: Dictionary = {}
-var initial_pinch_distance: float = 0.0
-var last_pinch_distance: float = 0.0
-var pinch_zoom_at_start: float = 1.0  # Store zoom level when pinch started
 
-# Gesture state machine
-enum GestureState { NONE, PENDING, PANNING, ZOOMING }
+# Gesture state machine (simplified - no pinch zoom on mobile)
+enum GestureState { NONE, PENDING, PANNING }
 var gesture_state: GestureState = GestureState.NONE
 var gesture_start_pos: Vector2 = Vector2.ZERO
 var accumulated_pan: Vector2 = Vector2.ZERO
-var zoom_locked: bool = false  # Prevents zoom changes during gesture transitions
-var pinch_needs_processing: bool = false  # Defer pinch to once per frame
 
 # Camera state
 var target_camera_pos: Vector2 = Vector2.ZERO
 var current_zoom: float = 1.0
 var camera_initialized: bool = false
 var last_viewport_size: Vector2 = Vector2.ZERO
+
+# JavaScript callback for zoom slider (web only)
+var js_zoom_callback: JavaScriptObject = null
 
 
 func _ready() -> void:
@@ -54,6 +53,8 @@ func _ready() -> void:
 		await get_tree().process_frame
 		await get_tree().process_frame
 		await get_tree().process_frame
+		# Set up JavaScript bridge for zoom slider
+		_setup_js_zoom_bridge()
 	_setup_camera()
 	_load_campaign_data()
 
@@ -79,6 +80,8 @@ func _setup_camera() -> void:
 	# Clamp to our zoom limits
 	initial_zoom = clamp(initial_zoom, MIN_ZOOM, MAX_ZOOM)
 
+	# Store base zoom for slider calculations (100% = initial fit)
+	base_zoom = initial_zoom
 	current_zoom = initial_zoom
 	camera.zoom = Vector2(current_zoom, current_zoom)
 
@@ -104,10 +107,7 @@ func _on_viewport_size_changed() -> void:
 
 
 func _process(_delta: float) -> void:
-	# Process pinch zoom once per frame (after all touch events have updated positions)
-	if pinch_needs_processing and touch_points.size() == 2:
-		_handle_pinch_gesture()
-		pinch_needs_processing = false
+	pass  # No per-frame processing needed
 
 
 func _input(event: InputEvent) -> void:
@@ -161,62 +161,32 @@ func _on_touch_pressed(touch_event: InputEventScreenTouch) -> void:
 		gesture_state = GestureState.PENDING
 		gesture_start_pos = touch_event.position
 		accumulated_pan = Vector2.ZERO
-	elif touch_points.size() == 2:
-		# Second finger down - start pinch zoom
-		gesture_state = GestureState.PENDING
-		initial_pinch_distance = _get_pinch_distance()
-		last_pinch_distance = initial_pinch_distance
-		pinch_zoom_at_start = current_zoom  # Save zoom when pinch starts
-		accumulated_pan = Vector2.ZERO
+	# Note: Multi-touch is ignored - zoom is handled by slider on mobile
 
 
 func _on_touch_released(touch_event: InputEventScreenTouch) -> void:
 	touch_points.erase(touch_event.index)
 
-	# Always persist the current zoom state when any finger is released
-	var persisted_zoom = camera.zoom.x
-
 	if touch_points.size() == 0:
-		# All fingers released - persist the zoom and lock it
+		# All fingers released
 		gesture_state = GestureState.NONE
-		current_zoom = persisted_zoom
-		camera.zoom = Vector2(current_zoom, current_zoom)  # Explicitly reapply zoom
 		target_camera_pos = camera.position
-		zoom_locked = false  # Unlock after all fingers released
-		pinch_needs_processing = false
 		_clamp_camera_position()
 	elif touch_points.size() == 1:
-		# Went from 2 fingers to 1 - lock zoom to prevent any changes during transition
-		zoom_locked = true
-		current_zoom = persisted_zoom
-		camera.zoom = Vector2(current_zoom, current_zoom)  # Explicitly reapply zoom
+		# Went from multi-touch to single touch - restart pan gesture
 		gesture_state = GestureState.PENDING
 		var remaining_pos = touch_points.values()[0]
 		gesture_start_pos = remaining_pos
 		accumulated_pan = Vector2.ZERO
 		target_camera_pos = camera.position
-		pinch_needs_processing = false
-		# Use a deferred call to unlock zoom after the current frame
-		_unlock_zoom_deferred.call_deferred()
-
-	# Reset pinch tracking
-	initial_pinch_distance = 0.0
-	last_pinch_distance = 0.0
-	pinch_zoom_at_start = current_zoom  # Update baseline for next pinch
-
-
-func _unlock_zoom_deferred() -> void:
-	zoom_locked = false
 
 
 func _on_touch_drag(drag_event: InputEventScreenDrag) -> void:
 	touch_points[drag_event.index] = drag_event.position
 
+	# Only handle single-touch pan - zoom is controlled by slider on mobile
 	if touch_points.size() == 1:
 		_handle_single_touch_drag(drag_event)
-	elif touch_points.size() == 2:
-		# Mark pinch for deferred processing (once per frame, after all finger positions updated)
-		pinch_needs_processing = true
 
 
 func _handle_single_touch_drag(drag_event: InputEventScreenDrag) -> void:
@@ -235,69 +205,40 @@ func _handle_single_touch_drag(drag_event: InputEventScreenDrag) -> void:
 		_clamp_camera_position()
 
 
-func _handle_pinch_gesture() -> void:
-	# Don't process pinch zoom if zoom is locked during gesture transition
-	if zoom_locked:
+# JavaScript bridge for zoom slider (web only)
+func _setup_js_zoom_bridge() -> void:
+	if not OS.has_feature("web"):
 		return
 
-	var pinch_distance = _get_pinch_distance()
-	var pinch_center = _get_pinch_center()
+	# Create callback that JavaScript can call when slider changes
+	js_zoom_callback = JavaScriptBridge.create_callback(_on_js_zoom_change)
+	var window = JavaScriptBridge.get_interface("window")
+	window.godotSetZoomMultiplier = js_zoom_callback
 
-	if pinch_distance <= 0 or initial_pinch_distance <= 0:
+
+func _on_js_zoom_change(args: Array) -> void:
+	if args.size() == 0:
 		return
 
-	# Check if we should start zooming
-	if gesture_state == GestureState.PENDING:
-		var distance_change = abs(pinch_distance - initial_pinch_distance)
-		if distance_change > PINCH_DEAD_ZONE:
-			gesture_state = GestureState.ZOOMING
-			last_pinch_distance = pinch_distance
-			pinch_zoom_at_start = current_zoom
+	var zoom_multiplier: float = args[0]
+	# Multiplier: 1.0 = 100% (base zoom), 2.0 = 200% (2x base zoom)
+	var new_zoom = clamp(base_zoom * zoom_multiplier, MIN_ZOOM, MAX_ZOOM)
 
-	if gesture_state == GestureState.ZOOMING:
-		# Calculate new zoom based on pinch ratio from start
-		var zoom_ratio = pinch_distance / initial_pinch_distance
-		var new_zoom = clamp(pinch_zoom_at_start * zoom_ratio, MIN_ZOOM, MAX_ZOOM)
+	if abs(new_zoom - current_zoom) > 0.0001:
+		# Zoom centered on screen
+		var viewport_size = get_viewport().get_visible_rect().size
+		var screen_center = viewport_size / 2.0
+		var world_center = camera.position + (screen_center - viewport_size / 2.0) / current_zoom
 
-		if abs(new_zoom - current_zoom) > 0.001:
-			# Get world position at pinch center before zoom
-			var world_pinch_center = _screen_to_world(pinch_center)
+		# Calculate position offset to maintain center
+		var zoom_ratio = new_zoom / current_zoom
+		var offset = world_center - camera.position
+		camera.position = world_center - offset * zoom_ratio
 
-			# Calculate position offset to zoom toward pinch center
-			var zoom_change = new_zoom / current_zoom
-			var offset = world_pinch_center - camera.position
-			camera.position = world_pinch_center - offset * zoom_change
-
-			# Apply new zoom
-			current_zoom = new_zoom
-			camera.zoom = Vector2(current_zoom, current_zoom)
-			target_camera_pos = camera.position
-
-			_clamp_camera_position()
-
-		last_pinch_distance = pinch_distance
-
-
-func _get_pinch_distance() -> float:
-	if touch_points.size() < 2:
-		return 0.0
-	var points = touch_points.values()
-	return points[0].distance_to(points[1])
-
-
-func _get_pinch_center() -> Vector2:
-	if touch_points.size() < 2:
-		return Vector2.ZERO
-	var points = touch_points.values()
-	return (points[0] + points[1]) / 2.0
-
-
-func _screen_to_world(screen_pos: Vector2) -> Vector2:
-	var viewport = get_viewport()
-	var viewport_size = viewport.get_visible_rect().size
-	var camera_center = camera.position
-	var offset_from_center = (screen_pos - viewport_size / 2.0) / current_zoom
-	return camera_center + offset_from_center
+		current_zoom = new_zoom
+		camera.zoom = Vector2(current_zoom, current_zoom)
+		target_camera_pos = camera.position
+		_clamp_camera_position()
 
 
 func _zoom_at_point(world_point: Vector2, zoom_delta: float) -> void:
