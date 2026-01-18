@@ -684,8 +684,7 @@ const Engine = (function () {
 	Engine.load = function (basePath, size) {
 		if (loadPromise == null) {
 			loadPath = basePath;
-			const cacheBuster = window.GODOT_CACHE_BUSTER ? `?v=${window.GODOT_CACHE_BUSTER}` : '';
-			loadPromise = preloader.loadPromise(`${loadPath}.wasm${cacheBuster}`, size, true);
+			loadPromise = preloader.loadPromise(`${loadPath}.wasm`, size, true);
 			requestAnimationFrame(preloader.animateProgress);
 		}
 		return loadPromise;
