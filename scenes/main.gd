@@ -72,11 +72,10 @@ func _detect_mobile_device() -> bool:
 	# Check for mobile platforms
 	if OS.has_feature("mobile") or OS.has_feature("android") or OS.has_feature("ios"):
 		return true
-	# On web, check for touch capability
+	# On web, use JavaScript to detect mobile browser
 	if OS.has_feature("web"):
-		# Web on mobile usually has touch, we'll show slider on all web builds
-		# and let users use it if they want
-		return true
+		var js_result = JavaScriptBridge.eval("window.isMobileDevice === true")
+		return js_result == true
 	return false
 
 
