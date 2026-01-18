@@ -91,18 +91,6 @@ Where:
 - `vec_AB = HexPointB.position - HexPointA.position` (displacement for +1 in X direction)
 - `vec_AC = HexPointC.position - HexPointA.position` (displacement for +1 in Y direction)
 
-### Debugging Marker Position Issues
-
-If the marker appears at the wrong hex coordinate (e.g., shows at (6, -6) instead of (4, -3)):
-
-1. **Calculate the offset error**: `(actual - expected)` = `(6-4, -6-(-3))` = `(2, -3)`
-2. **This means HexOrigin is placed at hex (2, -3) instead of (0, 0)**
-3. **Fix by moving HexOrigin**: Calculate new position as:
-   ```
-   correction = -error_x * vec_AB + -error_y * vec_AC
-   new_origin = current_origin + correction
-   ```
-
 ### Important Notes
 
 - HexPointA, B, C define the **scale and direction** of hex movement, not where (0,0) is
@@ -115,3 +103,18 @@ The web export uses a custom shell template with:
 - Zoom support (Ctrl+scroll on desktop, pinch on mobile)
 - Clean loading screen
 - Automatic campaign.json fetching for live updates
+
+### Web Campaign Data Loading
+
+The web version loads campaign data with this priority:
+1. **External fetch** from `campaign_data/campaign.json` on the web server (allows live updates without rebuilding)
+2. **Bundled fallback** from the PCK file if fetch fails
+
+**IMPORTANT:** Godot's `HTTPRequest` does not work reliably with relative URLs in web exports. The code uses `JavaScriptBridge` to get the browser's current URL and construct an absolute URL for the fetch. If you see the marker at the wrong position on the web build but correct locally, this is likely the cause.
+
+### Deployment Workflow
+
+The GitHub Actions workflow (`.github/workflows/deploy-pages.yml`) deploys to GitHub Pages:
+1. Copies `web_build/*` to deploy folder
+2. Copies `campaign_data/` to deploy folder (for live updates)
+3. The external `campaign_data/campaign.json` takes priority over bundled PCK data

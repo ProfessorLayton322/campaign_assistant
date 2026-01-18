@@ -325,8 +325,10 @@ func _load_campaign_data_web(attempt: int = 0) -> void:
 	add_child(http_request)
 	http_request.request_completed.connect(_on_web_request_completed.bind(attempt))
 
+	# Get base URL from browser and construct absolute URL (relative URLs don't work reliably with HTTPRequest in web exports)
+	var base_url = JavaScriptBridge.eval("window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1)")
 	# Add cache-busting query parameter
-	var url = CAMPAIGN_DATA_WEB_URL + "?t=" + str(Time.get_unix_time_from_system())
+	var url = str(base_url) + CAMPAIGN_DATA_WEB_URL + "?t=" + str(Time.get_unix_time_from_system())
 	print("Fetching campaign data from: ", url, " (Attempt: ", attempt + 1, ")")
 
 	var error = http_request.request(url)
