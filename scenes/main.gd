@@ -322,7 +322,9 @@ func _load_campaign_data_web() -> void:
 	add_child(http_request)
 	http_request.request_completed.connect(_on_web_request_completed)
 
-	var error = http_request.request(CAMPAIGN_DATA_WEB_URL)
+	# Add cache-busting query parameter
+	var url = CAMPAIGN_DATA_WEB_URL + "?t=" + str(Time.get_unix_time_from_system())
+	var error = http_request.request(url)
 	if error != OK:
 		push_error("Failed to start HTTP request: " + str(error))
 		_use_default_data()
