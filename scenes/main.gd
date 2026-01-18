@@ -6,14 +6,13 @@ const MARKER_SIZE = 64  # Marker size in world pixels
 
 # Zoom settings
 const MIN_ZOOM = 0.1  # Zoomed out (see more map)
-const MAX_ZOOM = 2.0  # Zoomed in (see detail)
+const MAX_ZOOM = 5.0  # Zoomed in (see detail)
 const ZOOM_SPEED = 0.1
 
 # Mobile touch settings
-const PINCH_ZOOM_SENSITIVITY = 0.003
+const PINCH_ZOOM_SENSITIVITY = 0.005
 const PAN_DEAD_ZONE = 3.0  # Pixels before pan starts
-const PINCH_DEAD_ZONE = 8.0  # Pixels before pinch zoom activates
-const SMOOTHING_FACTOR = 0.25  # Lower = smoother but laggier
+const PINCH_DEAD_ZONE = 5.0  # Pixels before pinch zoom activates
 
 @onready var map_sprite: Sprite2D = $Map
 @onready var team_marker: Sprite2D = $TeamMarker
@@ -31,6 +30,7 @@ var mouse_pan_start_pos: Vector2 = Vector2.ZERO
 var touch_points: Dictionary = {}
 var initial_pinch_distance: float = 0.0
 var last_pinch_distance: float = 0.0
+var pinch_zoom_at_start: float = 1.0  # Store zoom level when pinch started
 
 # Gesture state machine
 enum GestureState { NONE, PENDING, PANNING, ZOOMING }
@@ -38,15 +38,25 @@ var gesture_state: GestureState = GestureState.NONE
 var gesture_start_pos: Vector2 = Vector2.ZERO
 var accumulated_pan: Vector2 = Vector2.ZERO
 
-# Smoothing targets
+# Camera state
 var target_camera_pos: Vector2 = Vector2.ZERO
-var target_zoom: float = 1.0
-var smoothing_enabled: bool = false
+var current_zoom: float = 1.0
+var camera_initialized: bool = false
+var last_viewport_size: Vector2 = Vector2.ZERO
 
 
 func _ready() -> void:
+	# On web, defer camera setup to ensure viewport is properly sized
+	if OS.has_feature("web"):
+		# Wait multiple frames for mobile browsers to settle
+		await get_tree().process_frame
+		await get_tree().process_frame
+		await get_tree().process_frame
 	_setup_camera()
 	_load_campaign_data()
+
+	# Connect to viewport size changes for handling orientation changes
+	get_viewport().size_changed.connect(_on_viewport_size_changed)
 
 
 func _setup_camera() -> void:
@@ -55,38 +65,50 @@ func _setup_camera() -> void:
 
 	map_size = map_sprite.texture.get_size()
 
-	# Calculate initial zoom to fit map in viewport
 	var viewport_size = get_viewport().get_visible_rect().size
+	last_viewport_size = viewport_size
+
+	# Calculate zoom to fit map in viewport (cover mode - fill the screen)
 	var zoom_to_fit_x = viewport_size.x / map_size.x
 	var zoom_to_fit_y = viewport_size.y / map_size.y
-	var initial_zoom = min(zoom_to_fit_x, zoom_to_fit_y)
+	# Use max to cover the screen (no black bars), min to contain (may have bars)
+	var initial_zoom = max(zoom_to_fit_x, zoom_to_fit_y)
 
 	# Clamp to our zoom limits
 	initial_zoom = clamp(initial_zoom, MIN_ZOOM, MAX_ZOOM)
 
-	camera.zoom = Vector2(initial_zoom, initial_zoom)
-	target_zoom = initial_zoom
+	current_zoom = initial_zoom
+	camera.zoom = Vector2(current_zoom, current_zoom)
 
 	# Center camera on map
 	camera.position = map_size / 2.0
 	target_camera_pos = camera.position
 	camera.make_current()
+	camera_initialized = true
 
 
-func _process(delta: float) -> void:
-	# Apply smoothing for touch gestures
-	if smoothing_enabled:
-		camera.position = camera.position.lerp(target_camera_pos, SMOOTHING_FACTOR)
-		var current_zoom = camera.zoom.x
-		var new_zoom = lerp(current_zoom, target_zoom, SMOOTHING_FACTOR)
-		camera.zoom = Vector2(new_zoom, new_zoom)
+func _on_viewport_size_changed() -> void:
+	if not camera_initialized or map_size == Vector2.ZERO:
+		return
 
-		# Disable smoothing when close enough to targets
-		if camera.position.distance_to(target_camera_pos) < 0.5 and abs(camera.zoom.x - target_zoom) < 0.001:
-			smoothing_enabled = false
+	var new_viewport_size = get_viewport().get_visible_rect().size
+	if new_viewport_size == last_viewport_size:
+		return
+
+	last_viewport_size = new_viewport_size
+
+	# Keep current zoom but re-clamp camera position
+	_clamp_camera_position()
+
+
+func _process(_delta: float) -> void:
+	pass
 
 
 func _input(event: InputEvent) -> void:
+	if not camera_initialized:
+		return
+
 	# Mouse wheel zoom (desktop)
 	if event is InputEventMouseButton:
 		var mouse_event = event as InputEventMouseButton
@@ -135,10 +157,11 @@ func _on_touch_pressed(touch_event: InputEventScreenTouch) -> void:
 		gesture_start_pos = touch_event.position
 		accumulated_pan = Vector2.ZERO
 	elif touch_points.size() == 2:
-		# Second finger down - prepare for potential zoom
+		# Second finger down - start pinch zoom
 		gesture_state = GestureState.PENDING
 		initial_pinch_distance = _get_pinch_distance()
 		last_pinch_distance = initial_pinch_distance
+		pinch_zoom_at_start = current_zoom  # Save zoom when pinch starts
 		accumulated_pan = Vector2.ZERO
 
 
@@ -146,21 +169,19 @@ func _on_touch_released(touch_event: InputEventScreenTouch) -> void:
 	touch_points.erase(touch_event.index)
 
 	if touch_points.size() == 0:
-		# All fingers released - finalize position with smoothing
+		# All fingers released - persist the zoom
 		gesture_state = GestureState.NONE
+		current_zoom = camera.zoom.x  # Save the current zoom level
 		target_camera_pos = camera.position
-		target_zoom = camera.zoom.x
 		_clamp_camera_position()
 	elif touch_points.size() == 1:
-		# Went from 2 fingers to 1 - reset to pending state
-		# This prevents jarring movement when transitioning from pinch to pan
+		# Went from 2 fingers to 1 - save zoom and reset to pending for pan
+		current_zoom = camera.zoom.x  # Persist zoom before transitioning
 		gesture_state = GestureState.PENDING
 		var remaining_pos = touch_points.values()[0]
 		gesture_start_pos = remaining_pos
 		accumulated_pan = Vector2.ZERO
-		# Sync targets with current position
 		target_camera_pos = camera.position
-		target_zoom = camera.zoom.x
 
 	# Reset pinch tracking
 	initial_pinch_distance = 0.0
@@ -185,37 +206,50 @@ func _handle_single_touch_drag(drag_event: InputEventScreenDrag) -> void:
 			gesture_state = GestureState.PANNING
 
 	if gesture_state == GestureState.PANNING:
-		# Apply pan with smoothing
-		var delta = drag_event.relative / camera.zoom.x
-		target_camera_pos -= delta
-		# Apply directly for responsiveness, smoothing handles the rest
+		# Apply pan - divide by zoom since camera.zoom affects world scale
+		var delta = drag_event.relative / current_zoom
 		camera.position -= delta
-		_clamp_camera_position()
 		target_camera_pos = camera.position
+		_clamp_camera_position()
 
 
 func _handle_pinch_gesture() -> void:
-	var current_distance = _get_pinch_distance()
-	var current_center = _get_pinch_center()
+	var pinch_distance = _get_pinch_distance()
+	var pinch_center = _get_pinch_center()
+
+	if pinch_distance <= 0 or initial_pinch_distance <= 0:
+		return
 
 	# Check if we should start zooming
 	if gesture_state == GestureState.PENDING:
-		var distance_change = abs(current_distance - initial_pinch_distance)
+		var distance_change = abs(pinch_distance - initial_pinch_distance)
 		if distance_change > PINCH_DEAD_ZONE:
 			gesture_state = GestureState.ZOOMING
-			last_pinch_distance = current_distance
+			last_pinch_distance = pinch_distance
+			pinch_zoom_at_start = current_zoom
 
-	if gesture_state == GestureState.ZOOMING or gesture_state == GestureState.PANNING:
-		if last_pinch_distance > 0:
-			# Calculate zoom change
-			var zoom_delta = (current_distance - last_pinch_distance) * PINCH_ZOOM_SENSITIVITY
-			var pinch_center = current_center
+	if gesture_state == GestureState.ZOOMING:
+		# Calculate new zoom based on pinch ratio from start
+		var zoom_ratio = pinch_distance / initial_pinch_distance
+		var new_zoom = clamp(pinch_zoom_at_start * zoom_ratio, MIN_ZOOM, MAX_ZOOM)
+
+		if abs(new_zoom - current_zoom) > 0.001:
+			# Get world position at pinch center before zoom
 			var world_pinch_center = _screen_to_world(pinch_center)
 
-			# Apply zoom
-			_zoom_at_point_smooth(world_pinch_center, zoom_delta)
+			# Calculate position offset to zoom toward pinch center
+			var zoom_change = new_zoom / current_zoom
+			var offset = world_pinch_center - camera.position
+			camera.position = world_pinch_center - offset * zoom_change
 
-		last_pinch_distance = current_distance
+			# Apply new zoom
+			current_zoom = new_zoom
+			camera.zoom = Vector2(current_zoom, current_zoom)
+			target_camera_pos = camera.position
+
+			_clamp_camera_position()
+
+		last_pinch_distance = pinch_distance
 
 
 func _get_pinch_distance() -> float:
@@ -236,56 +270,34 @@ func _screen_to_world(screen_pos: Vector2) -> Vector2:
 	var viewport = get_viewport()
 	var viewport_size = viewport.get_visible_rect().size
 	var camera_center = camera.position
-	var offset_from_center = (screen_pos - viewport_size / 2.0) / camera.zoom.x
+	var offset_from_center = (screen_pos - viewport_size / 2.0) / current_zoom
 	return camera_center + offset_from_center
 
 
 func _zoom_at_point(world_point: Vector2, zoom_delta: float) -> void:
-	var old_zoom = camera.zoom.x
-	var new_zoom = clamp(old_zoom + zoom_delta, MIN_ZOOM, MAX_ZOOM)
+	var new_zoom = clamp(current_zoom + zoom_delta, MIN_ZOOM, MAX_ZOOM)
 
-	if new_zoom == old_zoom:
+	if abs(new_zoom - current_zoom) < 0.0001:
 		return
 
 	# Calculate the position offset needed to zoom toward the point
-	var zoom_ratio = new_zoom / old_zoom
+	var zoom_ratio = new_zoom / current_zoom
 	var offset = world_point - camera.position
 	camera.position = world_point - offset * zoom_ratio
-	camera.zoom = Vector2(new_zoom, new_zoom)
+
+	current_zoom = new_zoom
+	camera.zoom = Vector2(current_zoom, current_zoom)
 	target_camera_pos = camera.position
-	target_zoom = new_zoom
 
 	_clamp_camera_position()
-
-
-func _zoom_at_point_smooth(world_point: Vector2, zoom_delta: float) -> void:
-	var old_zoom = camera.zoom.x
-	var new_zoom = clamp(old_zoom + zoom_delta, MIN_ZOOM, MAX_ZOOM)
-
-	if abs(new_zoom - old_zoom) < 0.0001:
-		return
-
-	# Calculate the position offset needed to zoom toward the point
-	var zoom_ratio = new_zoom / old_zoom
-	var offset = world_point - camera.position
-	var new_position = world_point - offset * zoom_ratio
-
-	# Apply directly for responsiveness
-	camera.position = new_position
-	camera.zoom = Vector2(new_zoom, new_zoom)
-	target_camera_pos = new_position
-	target_zoom = new_zoom
-
-	_clamp_camera_position()
-	target_camera_pos = camera.position
 
 
 func _clamp_camera_position() -> void:
-	if map_size == Vector2.ZERO:
+	if map_size == Vector2.ZERO or current_zoom <= 0:
 		return
 
 	var viewport_size = get_viewport().get_visible_rect().size
-	var visible_area = viewport_size / camera.zoom.x
+	var visible_area = viewport_size / current_zoom
 
 	# Allow some margin beyond map edges
 	var margin = visible_area * 0.1
@@ -303,6 +315,8 @@ func _clamp_camera_position() -> void:
 		camera.position.y = map_size.y / 2.0
 	else:
 		camera.position.y = clamp(camera.position.y, visible_area.y / 2.0 + min_pos.y, max_pos.y - visible_area.y / 2.0)
+
+	target_camera_pos = camera.position
 
 
 func _load_campaign_data() -> void:
