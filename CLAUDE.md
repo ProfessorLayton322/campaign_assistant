@@ -74,6 +74,41 @@ WebSocket receives JSON → emits `command_received` → handler routes to proce
 - `addons/godot_mcp/utils/` - Shared utilities for node trees, resources, scripts
 - `web_build/` - Exported web build (not tracked in git)
 
+## Hex Coordinate System
+
+The team marker position is calculated using a hex grid coordinate system defined by four Marker2D nodes in `scenes/main.tscn`:
+
+- **HexOrigin** - The pixel position corresponding to hex coordinate (0, 0)
+- **HexPointA, HexPointB, HexPointC** - Define the basis vectors for the coordinate system
+
+### Position Formula
+
+```
+marker_position = HexOrigin.position + X * vec_AB + Y * vec_AC
+```
+
+Where:
+- `vec_AB = HexPointB.position - HexPointA.position` (displacement for +1 in X direction)
+- `vec_AC = HexPointC.position - HexPointA.position` (displacement for +1 in Y direction)
+
+### Debugging Marker Position Issues
+
+If the marker appears at the wrong hex coordinate (e.g., shows at (6, -6) instead of (4, -3)):
+
+1. **Calculate the offset error**: `(actual - expected)` = `(6-4, -6-(-3))` = `(2, -3)`
+2. **This means HexOrigin is placed at hex (2, -3) instead of (0, 0)**
+3. **Fix by moving HexOrigin**: Calculate new position as:
+   ```
+   correction = -error_x * vec_AB + -error_y * vec_AC
+   new_origin = current_origin + correction
+   ```
+
+### Important Notes
+
+- HexPointA, B, C define the **scale and direction** of hex movement, not where (0,0) is
+- HexOrigin defines **where (0,0) is** on the pixel map
+- If you change the map image, you may need to recalibrate all four reference markers
+
 ## Web Build
 
 The web export uses a custom shell template with:
