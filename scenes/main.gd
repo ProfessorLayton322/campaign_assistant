@@ -399,7 +399,7 @@ func _load_campaign_data_from_file(path: String) -> void:
 
 func _use_default_data() -> void:
 	campaign_data = {
-		"team_coordinates": {"x": 0, "y": 0}
+		"team_coordinates": {"x": 1, "y": 1}
 	}
 
 
