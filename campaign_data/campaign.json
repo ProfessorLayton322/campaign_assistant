@@ -1,7 +1,13 @@
 {
   "campaign_name": "TTRPG Campaign",
   "team_coordinates": {
-	"x": -3,
-	"y": 1
-  }
+	"x": 3,
+	"y": 2
+  },
+  "knights": [
+	{"coordinates": {"x": -2, "y": 1}, "spawned": true},
+	{"coordinates": {"x": 3, "y": 3}, "spawned": true},
+	{"coordinates": {"x": 0, "y": 0}, "spawned": false},
+	{"coordinates": {"x": 0, "y": 0}, "spawned": false}
+  ]
 }

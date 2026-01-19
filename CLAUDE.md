@@ -97,6 +97,53 @@ Where:
 - HexOrigin defines **where (0,0) is** on the pixel map
 - If you change the map image, you may need to recalibrate all four reference markers
 
+## Knights System
+
+Knights are NPCs that can be placed on the map and are visible only when adjacent to the team.
+
+### Campaign Data Structure
+
+Knights are stored in `campaign_data/campaign.json` as an array:
+
+```json
+{
+  "knights": [
+    {"coordinates": {"x": 0, "y": 0}, "spawned": false},
+    {"coordinates": {"x": 0, "y": 0}, "spawned": false},
+    {"coordinates": {"x": 0, "y": 0}, "spawned": false},
+    {"coordinates": {"x": 0, "y": 0}, "spawned": false}
+  ]
+}
+```
+
+Each knight has:
+- `coordinates` - Hex coordinates (`x`, `y`) using the same system as team position
+- `spawned` - Boolean flag; knight only appears on map when `true`
+
+### Knight Spawning
+
+The Knight node in `main.tscn` serves as a template (hidden by default). When campaign data loads, `main.gd`:
+1. Iterates through the knights array
+2. For each knight with `spawned: true`, duplicates the Knight template
+3. Positions the duplicate using hex coordinates (same formula as team marker)
+4. Sets visibility based on adjacency to team
+
+### Visibility Rules
+
+A knight is visible if and only if it is on an adjacent hex to the team. Adjacent hexes are defined by the following coordinate differences from the team position:
+
+| Offset | Description |
+|--------|-------------|
+| (0, 0) | Same hex |
+| (1, 0) | Right neighbor |
+| (-1, 0) | Left neighbor |
+| (0, 1) | Top-right neighbor |
+| (0, -1) | Bottom-left neighbor |
+| (1, -1) | Bottom-right neighbor |
+| (-1, 1) | Top-left neighbor |
+
+This implements "fog of war" for knights - they remain hidden until the party gets close.
+
 ## Web Build
 
 The web export uses a custom shell template with:

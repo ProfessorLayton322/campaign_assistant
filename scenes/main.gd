@@ -26,8 +26,10 @@ var base_zoom: float = 1.0  # The "100%" zoom level
 @onready var hex_point_b: Marker2D = $HexPointB
 @onready var hex_point_c: Marker2D = $HexPointC
 @onready var hex_origin: Marker2D = $HexOrigin
+@onready var knight_template: Sprite2D = $Knight
 
 var campaign_data: Dictionary = {}
+var spawned_knights: Array[Sprite2D] = []
 var map_size: Vector2 = Vector2.ZERO
 var http_request: HTTPRequest
 
@@ -441,6 +443,58 @@ func _update_marker_positions() -> void:
 	if team_marker.texture:
 		var marker_texture_size = team_marker.texture.get_size()
 		team_marker.scale = Vector2(MARKER_SIZE, MARKER_SIZE) / marker_texture_size
+
+	# Update knights
+	_update_knights(hex_x, hex_y, vec_ab, vec_ac)
+
+
+func _update_knights(team_hex_x: int, team_hex_y: int, vec_ab: Vector2, vec_ac: Vector2) -> void:
+	# Clear previously spawned knights
+	for knight in spawned_knights:
+		knight.queue_free()
+	spawned_knights.clear()
+
+	# Get knights array from campaign data
+	var knights: Array = campaign_data.get("knights", [])
+
+	for knight_data in knights:
+		var spawned: bool = knight_data.get("spawned", false)
+		if not spawned:
+			continue
+
+		# Get knight coordinates
+		var coords = knight_data.get("coordinates", {"x": 0, "y": 0})
+		var knight_hex_x: int = int(coords.get("x", 0))
+		var knight_hex_y: int = int(coords.get("y", 0))
+
+		# Duplicate the knight template
+		var knight_instance: Sprite2D = knight_template.duplicate()
+		add_child(knight_instance)
+		spawned_knights.append(knight_instance)
+
+		# Calculate position using hex coordinates
+		knight_instance.position = hex_origin.position + knight_hex_x * vec_ab + knight_hex_y * vec_ac
+
+		# Determine visibility based on adjacency to team
+		knight_instance.visible = _is_adjacent_hex(team_hex_x, team_hex_y, knight_hex_x, knight_hex_y)
+
+
+func _is_adjacent_hex(team_x: int, team_y: int, knight_x: int, knight_y: int) -> bool:
+	var dx: int = knight_x - team_x
+	var dy: int = knight_y - team_y
+
+	# Adjacent hex offsets: (0,0), (1,0), (-1,0), (0,1), (0,-1), (1,-1), (-1,1)
+	var adjacent_offsets: Array = [
+		Vector2i(0, 0),
+		Vector2i(1, 0),
+		Vector2i(-1, 0),
+		Vector2i(0, 1),
+		Vector2i(0, -1),
+		Vector2i(1, -1),
+		Vector2i(-1, 1)
+	]
+
+	return Vector2i(dx, dy) in adjacent_offsets
 
 
 # Utility function to convert pixel position to normalized coordinates
