@@ -27,9 +27,13 @@ var base_zoom: float = 1.0  # The "100%" zoom level
 @onready var hex_point_c: Marker2D = $HexPointC
 @onready var hex_origin: Marker2D = $HexOrigin
 @onready var knight_template: Sprite2D = $Knight
+@onready var city_template: Sprite2D = $City
+@onready var castle_template: Sprite2D = $Castle
 
 var campaign_data: Dictionary = {}
 var spawned_knights: Array[Sprite2D] = []
+var spawned_cities: Array[Sprite2D] = []
+var spawned_castles: Array[Sprite2D] = []
 var map_size: Vector2 = Vector2.ZERO
 var http_request: HTTPRequest
 
@@ -447,6 +451,10 @@ func _update_marker_positions() -> void:
 	# Update knights
 	_update_knights(hex_x, hex_y, vec_ab, vec_ac)
 
+	# Update cities and castles (always visible)
+	_update_cities(vec_ab, vec_ac)
+	_update_castles(vec_ab, vec_ac)
+
 
 func _update_knights(team_hex_x: int, team_hex_y: int, vec_ab: Vector2, vec_ac: Vector2) -> void:
 	# Clear previously spawned knights
@@ -495,6 +503,60 @@ func _is_adjacent_hex(team_x: int, team_y: int, knight_x: int, knight_y: int) ->
 	]
 
 	return Vector2i(dx, dy) in adjacent_offsets
+
+
+func _update_cities(vec_ab: Vector2, vec_ac: Vector2) -> void:
+	# Clear previously spawned cities
+	for city in spawned_cities:
+		city.queue_free()
+	spawned_cities.clear()
+
+	# Get cities array from campaign data
+	var cities: Array = campaign_data.get("cities", [])
+
+	for city_data in cities:
+		# Get city coordinates
+		var coords = city_data.get("coordinates", {"x": 0, "y": 0})
+		var city_hex_x: int = int(coords.get("x", 0))
+		var city_hex_y: int = int(coords.get("y", 0))
+
+		# Duplicate the city template
+		var city_instance: Sprite2D = city_template.duplicate()
+		add_child(city_instance)
+		spawned_cities.append(city_instance)
+
+		# Calculate position using hex coordinates
+		city_instance.position = hex_origin.position + city_hex_x * vec_ab + city_hex_y * vec_ac
+
+		# Cities are always visible
+		city_instance.visible = true
+
+
+func _update_castles(vec_ab: Vector2, vec_ac: Vector2) -> void:
+	# Clear previously spawned castles
+	for castle in spawned_castles:
+		castle.queue_free()
+	spawned_castles.clear()
+
+	# Get castles array from campaign data
+	var castles: Array = campaign_data.get("castles", [])
+
+	for castle_data in castles:
+		# Get castle coordinates
+		var coords = castle_data.get("coordinates", {"x": 0, "y": 0})
+		var castle_hex_x: int = int(coords.get("x", 0))
+		var castle_hex_y: int = int(coords.get("y", 0))
+
+		# Duplicate the castle template
+		var castle_instance: Sprite2D = castle_template.duplicate()
+		add_child(castle_instance)
+		spawned_castles.append(castle_instance)
+
+		# Calculate position using hex coordinates
+		castle_instance.position = hex_origin.position + castle_hex_x * vec_ab + castle_hex_y * vec_ac
+
+		# Castles are always visible
+		castle_instance.visible = true
 
 
 # Utility function to convert pixel position to normalized coordinates

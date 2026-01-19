@@ -144,6 +144,47 @@ A knight is visible if and only if it is on an adjacent hex to the team. Adjacen
 
 This implements "fog of war" for knights - they remain hidden until the party gets close.
 
+## Cities and Castles System
+
+Cities and castles are landmarks that are always visible on the map, regardless of team position.
+
+### Campaign Data Structure
+
+Cities and castles are stored in `campaign_data/campaign.json` as arrays:
+
+```json
+{
+  "cities": [
+    {"name": "Bucht", "coordinates": {"x": 0, "y": 0}},
+    {"name": "Koppelsbleek", "coordinates": {"x": -2, "y": 5}}
+  ],
+  "castles": [
+    {"name": "Thornwall Keep", "coordinates": {"x": 2, "y": -1}},
+    {"name": "Ravenhold", "coordinates": {"x": -3, "y": 3}}
+  ]
+}
+```
+
+Each city/castle has:
+- `name` - Display name for the location
+- `coordinates` - Hex coordinates (`x`, `y`) using the same system as team position
+
+### Spawning Mechanism
+
+The City and Castle nodes in `main.tscn` serve as templates (hidden by default). When campaign data loads, `main.gd`:
+1. Iterates through the cities/castles arrays
+2. Duplicates the respective template for each entry
+3. Positions the duplicate using hex coordinates (same formula as team marker)
+4. Sets visibility to `true` (always visible, unlike knights)
+
+### Differences from Knights
+
+| Feature | Knights | Cities/Castles |
+|---------|---------|----------------|
+| Visibility | Adjacent to team only | Always visible |
+| `spawned` flag | Required (`true` to show) | Not used |
+| Fog of war | Yes | No |
+
 ## Web Build
 
 The web export uses a custom shell template with:

@@ -9,5 +9,13 @@
 	{"coordinates": {"x": 3, "y": 3}, "spawned": true},
 	{"coordinates": {"x": 0, "y": 0}, "spawned": false},
 	{"coordinates": {"x": 0, "y": 0}, "spawned": false}
+  ],
+  "cities": [
+	{"name": "Bucht", "coordinates": {"x": 0, "y": 0}},
+	{"name": "Vegensport", "coordinates": {"x": -4, "y": 4}}
+  ],
+  "castles": [
+	{"name": "Thornwall Keep", "coordinates": {"x": 4, "y": -6}},
+	{"name": "Koppelsbleek", "coordinates": {"x": -1, "y": 4}}
   ]
 }
